@@ -1,0 +1,27 @@
+{
+  "name": "@traceforge/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@traceforge/env": "workspace:*",
+    "bullmq": "5.41.9",
+    "ioredis": "5.6.1",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@traceforge/eslint-config": "workspace:*",
+    "@traceforge/typescript-config": "workspace:*",
+    "@types/node": "22.14.0",
+    "eslint": "9.24.0",
+    "tsx": "4.19.3",
+    "typescript": "5.8.3"
+  }
+}

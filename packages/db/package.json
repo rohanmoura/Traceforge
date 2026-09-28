@@ -1,0 +1,31 @@
+{
+  "name": "@traceforge/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "build": "prisma generate",
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "6.5.0"
+  },
+  "devDependencies": {
+    "@traceforge/eslint-config": "workspace:*",
+    "@traceforge/typescript-config": "workspace:*",
+    "@types/node": "22.14.0",
+    "eslint": "9.24.0",
+    "prisma": "6.5.0",
+    "typescript": "5.8.3",
+    "@prisma/client": "6.5.0"
+  }
+}
