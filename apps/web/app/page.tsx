@@ -34,7 +34,7 @@ async function request<T>(key: string, path: string, init?: RequestInit) {
   const response = await fetch(path, {
     ...init,
     headers: {
-      authorization: `Bearer ${key}`,
+      ...(key ? { authorization: `Bearer ${key}` } : {}),
       ...(init?.body ? { "content-type": "application/json" } : {}),
       ...init?.headers,
     },
@@ -70,6 +70,9 @@ export default function Dashboard() {
   const [apiKey, setApiKey] = useState("");
   const [keyInput, setKeyInput] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [publicReadOnly, setPublicReadOnly] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -86,6 +89,8 @@ export default function Dashboard() {
     '{\n  "orderId": "ord_123",\n  "total": 49.99\n}',
   );
   const [expandedDeliveryId, setExpandedDeliveryId] = useState("");
+  const [sendingEvent, setSendingEvent] = useState(false);
+  const canManageWorkspace = !publicReadOnly || Boolean(apiKey);
 
   const selectedProject = projects.find(
     (project) => project.id === selectedProjectId,
@@ -146,30 +151,63 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
-    const savedKey = window.sessionStorage.getItem("traceforge-api-key");
-    if (!savedKey) return;
-    setApiKey(savedKey);
     setLoading(true);
-    loadProjects(savedKey)
-      .then(() => setAuthenticated(true))
-      .catch(() => {
-        window.sessionStorage.removeItem("traceforge-api-key");
-        setError("Saved API key was rejected. Enter your key again.");
-      })
-      .finally(() => setLoading(false));
+    let active = true;
+    async function initialize() {
+      try {
+        const sessionResponse = await fetch("/api/session");
+        const session = (await sessionResponse.json()) as {
+          publicReadOnly: boolean;
+        };
+        const savedKey = window.sessionStorage.getItem("traceforge-api-key");
+        if (!active) return;
+        setPublicReadOnly(session.publicReadOnly);
+        if (!savedKey && !session.publicReadOnly) return;
+        try {
+          await loadProjects(savedKey ?? "");
+          if (active) {
+            setApiKey(savedKey ?? "");
+            setAuthenticated(true);
+          }
+        } catch {
+          window.sessionStorage.removeItem("traceforge-api-key");
+          if (!session.publicReadOnly) {
+            setError("Saved API key was rejected. Enter your key again.");
+            return;
+          }
+          await loadProjects("");
+          if (active) {
+            setApiKey("");
+            setAuthenticated(true);
+          }
+        }
+      } catch {
+        setError("Could not connect to the TraceForge workspace.");
+      } finally {
+        if (active) {
+          setSessionChecked(true);
+          setLoading(false);
+        }
+      }
+    }
+    void initialize();
+    return () => {
+      active = false;
+    };
   }, [loadProjects]);
 
   useEffect(() => {
-    if (!authenticated || !apiKey || !selectedProjectId) return;
+    if (!authenticated || (!apiKey && !publicReadOnly) || !selectedProjectId)
+      return;
     loadEndpoints(apiKey, selectedProjectId).catch((cause: unknown) =>
       setError(
         cause instanceof Error ? cause.message : "Could not load endpoints.",
       ),
     );
-  }, [apiKey, authenticated, loadEndpoints, selectedProjectId]);
+  }, [apiKey, authenticated, loadEndpoints, publicReadOnly, selectedProjectId]);
 
   useEffect(() => {
-    if (!authenticated || !apiKey || !selectedEndpointId) {
+    if (!authenticated || (!apiKey && !publicReadOnly) || !selectedEndpointId) {
       setDeliveries([]);
       return;
     }
@@ -189,7 +227,47 @@ export default function Dashboard() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [apiKey, authenticated, loadDeliveries, selectedEndpointId]);
+  }, [
+    apiKey,
+    authenticated,
+    loadDeliveries,
+    publicReadOnly,
+    selectedEndpointId,
+  ]);
+
+  useEffect(() => {
+    if (!notice && !error) return;
+    const timer = window.setTimeout(() => {
+      setNotice("");
+      setError("");
+    }, 4_000);
+    return () => window.clearTimeout(timer);
+  }, [error, notice]);
+
+  useEffect(() => {
+    if (!authenticated || (!apiKey && !publicReadOnly) || !selectedProjectId)
+      return;
+    const refreshEndpointCounts = async () => {
+      try {
+        const result = await request<{ endpoints: Endpoint[] }>(
+          apiKey,
+          `/api/projects/${selectedProjectId}/endpoints`,
+        );
+        setEndpoints((current) =>
+          current.map((endpoint) => {
+            const updated = result.endpoints.find(
+              (item) => item.id === endpoint.id,
+            );
+            return updated ? { ...endpoint, _count: updated._count } : endpoint;
+          }),
+        );
+      } catch {
+        return;
+      }
+    };
+    const timer = window.setInterval(() => void refreshEndpointCounts(), 5_000);
+    return () => window.clearInterval(timer);
+  }, [apiKey, authenticated, publicReadOnly, selectedProjectId]);
 
   async function connect(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,6 +278,7 @@ export default function Dashboard() {
       window.sessionStorage.setItem("traceforge-api-key", keyInput);
       setApiKey(keyInput);
       setAuthenticated(true);
+      setShowAdminLogin(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not connect.");
     } finally {
@@ -210,6 +289,13 @@ export default function Dashboard() {
   function disconnect() {
     window.sessionStorage.removeItem("traceforge-api-key");
     setApiKey("");
+    setShowAdminLogin(false);
+    if (publicReadOnly) {
+      void loadProjects("").catch(() =>
+        setError("Could not load the public workspace."),
+      );
+      return;
+    }
     setAuthenticated(false);
     setProjects([]);
     setEndpoints([]);
@@ -271,23 +357,46 @@ export default function Dashboard() {
 
   async function sendEvent(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedEndpointId) return;
+    if (!selectedEndpointId || sendingEvent) return;
     setError("");
+    setNotice("Sending event to the queue…");
+    setSendingEvent(true);
     try {
       const payload: unknown = JSON.parse(eventPayload);
       if (!payload || typeof payload !== "object" || Array.isArray(payload))
         throw new Error("Payload must be a JSON object.");
-      await request(apiKey, `/api/endpoints/${selectedEndpointId}/events`, {
-        method: "POST",
-        body: JSON.stringify({ type: eventType, payload }),
-      });
+      const result = await request<{ deliveryId: string }>(
+        apiKey,
+        `/api/endpoints/${selectedEndpointId}/events`,
+        {
+          method: "POST",
+          body: JSON.stringify({ type: eventType, payload }),
+        },
+      );
       await loadDeliveries(apiKey, selectedEndpointId);
-      setNotice("Test event queued for delivery.");
+      setExpandedDeliveryId(result.deliveryId);
+      setNotice("Event queued. Delivery status will refresh automatically.");
     } catch (cause) {
+      setNotice("");
       setError(
         cause instanceof Error ? cause.message : "Could not send event.",
       );
+    } finally {
+      setSendingEvent(false);
     }
+  }
+
+  if (!sessionChecked || (loading && !authenticated)) {
+    return (
+      <main className="connect-screen">
+        <div className="connect-card">
+          <div className="brand-mark">T</div>
+          <p className="eyebrow">WEBHOOK RELIABILITY</p>
+          <h1>Connecting workspace</h1>
+          <p className="muted">Checking workspace access…</p>
+        </div>
+      </main>
+    );
   }
 
   if (!authenticated) {
@@ -295,12 +404,9 @@ export default function Dashboard() {
       <main className="connect-screen">
         <div className="connect-card">
           <div className="brand-mark">T</div>
-          <p className="eyebrow">DEVELOPER OBSERVABILITY</p>
+          <p className="eyebrow">WEBHOOK RELIABILITY</p>
           <h1>Welcome to TraceForge</h1>
-          <p className="muted">
-            Connect your local workspace using the API key from your `.env`
-            file. It stays in this browser tab session.
-          </p>
+          <p className="muted">Connect to the workspace using its API key.</p>
           <form onSubmit={connect} className="stack-form">
             <label htmlFor="api-key">Workspace API key</label>
             <input
@@ -319,7 +425,7 @@ export default function Dashboard() {
           </form>
           {error && <p className="error-message">{error}</p>}
           <p className="hint">
-            Find it in `D:\OneDrive\Desktop\Projects\traceforge\.env`
+            The workspace owner provides this key securely.
           </p>
         </div>
       </main>
@@ -348,26 +454,40 @@ export default function Dashboard() {
           ))}
           {!projects.length && <p className="sidebar-empty">No projects yet</p>}
         </div>
-        <form className="sidebar-create" onSubmit={createProject}>
-          <input
-            aria-label="New project name"
-            value={projectName}
-            onChange={(event) => setProjectName(event.target.value)}
-            placeholder="New project name"
-            maxLength={100}
-            required
-          />
-          <button aria-label="Create project" title="Create project">
-            +
-          </button>
-        </form>
+        {canManageWorkspace && (
+          <form className="sidebar-create" onSubmit={createProject}>
+            <input
+              aria-label="New project name"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="New project name"
+              maxLength={100}
+              required
+            />
+            <button aria-label="Create project" title="Create project">
+              +
+            </button>
+          </form>
+        )}
         <div className="sidebar-spacer" />
         <div className="connection-state">
-          <span className="live-dot" /> Connected to local API
+          <span className="live-dot" />
+          {publicReadOnly && !apiKey
+            ? "Public read-only access"
+            : "Connected to private workspace"}
         </div>
-        <button className="text-button" onClick={disconnect}>
-          Disconnect workspace
-        </button>
+        {publicReadOnly && !apiKey ? (
+          <button
+            className="text-button"
+            onClick={() => setShowAdminLogin(true)}
+          >
+            Admin sign in
+          </button>
+        ) : (
+          <button className="text-button" onClick={disconnect}>
+            Disconnect workspace
+          </button>
+        )}
       </aside>
 
       <section className="main-panel" id="overview">
@@ -385,14 +505,15 @@ export default function Dashboard() {
         <div className="dashboard-content">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">WEBHOOK OBSERVABILITY</p>
+              <p className="eyebrow">WEBHOOK RELIABILITY</p>
               <h1>{selectedProject?.name ?? "Your workspace"}</h1>
               <p className="muted">
                 Monitor endpoints, inspect deliveries, and test integrations.
               </p>
             </div>
             <span className="environment-tag">
-              <span className="live-dot" /> Development
+              <span className="live-dot" />
+              {publicReadOnly && !apiKey ? "Public read-only" : "Workspace"}
             </span>
           </div>
 
@@ -403,7 +524,11 @@ export default function Dashboard() {
             </div>
           )}
           {notice && (
-            <div className="alert success-message">
+            <div
+              className={`alert ${sendingEvent ? "info-message" : "success-message"}`}
+              role="status"
+              aria-live="polite"
+            >
               {notice}
               <button onClick={() => setNotice("")}>Dismiss</button>
             </div>
@@ -477,11 +602,13 @@ export default function Dashboard() {
                 <div className="empty-inline">
                   <strong>No endpoint connected</strong>
                   <span>
-                    Create a destination below to start tracking deliveries.
+                    {canManageWorkspace
+                      ? "Create a destination below to start tracking deliveries."
+                      : "No endpoint has been added to this workspace yet."}
                   </span>
                 </div>
               )}
-              {selectedProject && (
+              {selectedProject && canManageWorkspace && (
                 <form className="create-endpoint" onSubmit={createEndpoint}>
                   <div className="form-title">Add endpoint</div>
                   <input
@@ -505,38 +632,52 @@ export default function Dashboard() {
               )}
             </div>
 
-            <form className="event-card" onSubmit={sendEvent}>
-              <div className="card-heading">
-                <div>
-                  <p className="eyebrow">DEVELOPER TOOL</p>
-                  <h3>Send a test event</h3>
+            {canManageWorkspace ? (
+              <form className="event-card" onSubmit={sendEvent}>
+                <div className="card-heading">
+                  <div>
+                    <p className="eyebrow">EVENT DELIVERY</p>
+                    <h3>Send an event</h3>
+                  </div>
+                  <span className="code-icon">{}</span>
                 </div>
-                <span className="code-icon">{}</span>
-              </div>
-              <label htmlFor="event-type">Event type</label>
-              <input
-                id="event-type"
-                value={eventType}
-                onChange={(event) => setEventType(event.target.value)}
-                maxLength={200}
-                required
-                disabled={!selectedEndpointId}
-              />
-              <label htmlFor="event-payload">JSON payload</label>
-              <textarea
-                id="event-payload"
-                value={eventPayload}
-                onChange={(event) => setEventPayload(event.target.value)}
-                spellCheck={false}
-                disabled={!selectedEndpointId}
-              />
-              <button className="primary-button" disabled={!selectedEndpointId}>
-                Queue test delivery <span>→</span>
-              </button>
-              <p className="form-caption">
-                Payload is signed with the endpoint secret.
-              </p>
-            </form>
+                <label htmlFor="event-type">Event type</label>
+                <input
+                  id="event-type"
+                  value={eventType}
+                  onChange={(event) => setEventType(event.target.value)}
+                  maxLength={200}
+                  required
+                  disabled={!selectedEndpointId}
+                />
+                <label htmlFor="event-payload">JSON payload</label>
+                <textarea
+                  id="event-payload"
+                  value={eventPayload}
+                  onChange={(event) => setEventPayload(event.target.value)}
+                  spellCheck={false}
+                  disabled={!selectedEndpointId}
+                />
+                <button
+                  className="primary-button"
+                  disabled={!selectedEndpointId || sendingEvent}
+                >
+                  {sendingEvent ? "Queueing…" : "Queue event"} <span>→</span>
+                </button>
+                <p className="form-caption">
+                  Payload is signed with the endpoint secret.
+                </p>
+              </form>
+            ) : (
+              <article className="event-card readonly-card">
+                <p className="eyebrow">PUBLIC VIEW</p>
+                <h3>Read-only workspace</h3>
+                <p>
+                  Delivery history is visible. Sending events and changing
+                  workspace settings require owner access.
+                </p>
+              </article>
+            )}
           </div>
 
           <div className="section-heading delivery-heading">
@@ -630,7 +771,7 @@ export default function Dashboard() {
                         </strong>
                         <span>
                           {selectedEndpoint
-                            ? "Send a test event to see its delivery lifecycle here."
+                            ? "Send an event to see its delivery lifecycle here."
                             : "Delivery history appears after you select an endpoint."}
                         </span>
                       </div>
@@ -640,12 +781,52 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
+          {publicReadOnly && !apiKey && !projects.length && (
+            <p className="muted public-empty-note">
+              This workspace has no published project yet.
+            </p>
+          )}
           <footer className="dashboard-footer">
             <span>TraceForge · Webhook reliability workspace</span>
             <span>Local development</span>
           </footer>
         </div>
       </section>
+      {showAdminLogin && (
+        <div className="public-access-overlay">
+          <form className="connect-card" onSubmit={connect}>
+            <button
+              className="text-button modal-close"
+              type="button"
+              onClick={() => setShowAdminLogin(false)}
+            >
+              Close
+            </button>
+            <div className="brand-mark">T</div>
+            <p className="eyebrow">OWNER ACCESS</p>
+            <h1>Manage workspace</h1>
+            <p className="muted">
+              Sign in with the private workspace API key to create projects,
+              endpoints, and deliveries.
+            </p>
+            <label htmlFor="admin-api-key">Workspace API key</label>
+            <input
+              id="admin-api-key"
+              autoComplete="off"
+              type="password"
+              value={keyInput}
+              onChange={(event) => setKeyInput(event.target.value)}
+              placeholder="Paste the private API key"
+              minLength={32}
+              required
+            />
+            {error && <p className="error-message">{error}</p>}
+            <button className="primary-button" disabled={loading}>
+              {loading ? "Connecting…" : "Sign in"}
+            </button>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

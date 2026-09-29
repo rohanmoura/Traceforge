@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@traceforge/db";
 import { validateEndpointUrl } from "@traceforge/env";
-import { isAuthorizedApiRequest } from "@/src/server/api-auth";
+import {
+  isAuthorizedApiRequest,
+  isPublicReadOnlyGuestRequest,
+} from "@/src/server/api-auth";
 import { z } from "zod";
 
 const createEndpointSchema = z.object({
@@ -28,7 +31,14 @@ export async function GET(
     },
     orderBy: { createdAt: "desc" },
   });
-  return Response.json({ endpoints });
+  return Response.json({
+    endpoints: isPublicReadOnlyGuestRequest(request)
+      ? endpoints.map((endpoint) => ({
+          ...endpoint,
+          url: new URL(endpoint.url).origin,
+        }))
+      : endpoints,
+  });
 }
 
 export async function POST(

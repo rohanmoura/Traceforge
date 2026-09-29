@@ -43,7 +43,7 @@ async function processDelivery(job: Job<DeliveryJob>) {
     return;
   }
 
-  const attemptNumber = delivery.attemptCount + 1;
+  const attemptNumber = job.attemptsMade + 1;
   const body = JSON.stringify({
     id: delivery.id,
     type: delivery.eventType,

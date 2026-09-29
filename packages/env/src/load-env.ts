@@ -12,6 +12,10 @@ const envSchema = z.object({
     ),
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
   TRACEFORGE_API_KEY: z.string().min(32).optional(),
+  TRACEFORGE_PUBLIC_READONLY: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env) {

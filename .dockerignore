@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.turbo
+.env
+.env.*
+!.env.example
+.gitignore
+npm-debug.log*
+pnpm-debug.log*

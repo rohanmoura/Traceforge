@@ -9,8 +9,13 @@ function isPrivateIpv4(address: string) {
     first === 10 ||
     first === 127 ||
     (first === 169 && second === 254) ||
+    (first === 100 && second !== undefined && second >= 64 && second <= 127) ||
     (first === 172 && second !== undefined && second >= 16 && second <= 31) ||
     (first === 192 && second === 168) ||
+    (first === 192 && second === 0) ||
+    (first === 198 && second !== undefined && second >= 18 && second <= 19) ||
+    (first === 198 && second === 51) ||
+    (first === 203 && second === 0) ||
     first >= 224
   );
 }

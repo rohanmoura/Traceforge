@@ -753,6 +753,11 @@ textarea:focus {
   border-color: #28513f;
   background: #102119;
 }
+.info-message {
+  color: #8ecbff;
+  border-color: #29486a;
+  background: #101c2a;
+}
 .dashboard-footer {
   display: flex;
   justify-content: space-between;
@@ -768,6 +773,57 @@ textarea:focus {
   place-items: center;
   padding: 24px;
   background: radial-gradient(ellipse at 50% 35%, #132326 0%, #090d14 58%);
+}
+.public-access-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #05080dcc;
+  backdrop-filter: blur(8px);
+}
+.public-access-overlay .connect-card {
+  position: relative;
+  width: min(100%, 430px);
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+  border: 1px solid #263543;
+  border-radius: 12px;
+  background: #0e151e;
+}
+.public-access-overlay .connect-card h1,
+.public-access-overlay .connect-card p {
+  margin: 0;
+}
+.public-access-overlay .connect-card input {
+  min-height: 42px;
+  padding: 10px;
+  border: 1px solid #293747;
+  border-radius: 7px;
+  background: #0a1018;
+  color: #e8edf5;
+}
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+.readonly-card {
+  align-content: center;
+  gap: 12px;
+}
+.readonly-card h3,
+.readonly-card p {
+  margin: 0;
+}
+.readonly-card p:not(.eyebrow),
+.public-empty-note {
+  color: #91a0b3;
+  font-size: 12px;
+  line-height: 1.6;
 }
 .connect-card {
   width: min(430px, 100%);

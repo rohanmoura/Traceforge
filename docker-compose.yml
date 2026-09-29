@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: traceforge
       POSTGRES_PASSWORD: traceforge
       POSTGRES_DB: traceforge
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,8 +18,6 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -29,6 +25,78 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  web:
+    image: ${TRACEFORGE_IMAGE:-traceforge:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://traceforge:traceforge@postgres:5432/traceforge?schema=public
+      REDIS_URL: redis://redis:6379
+      TRACEFORGE_API_KEY: ${TRACEFORGE_API_KEY:?Set TRACEFORGE_API_KEY in .env}
+    command:
+      - sh
+      - -c
+      - test "$${TRACEFORGE_API_KEY}" && pnpm --filter @traceforge/db exec prisma migrate deploy && pnpm --filter @traceforge/web start
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/health').then((response) => process.exit(response.ok ? 0: 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+  worker:
+    image: ${TRACEFORGE_IMAGE:-traceforge:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["pnpm", "--filter", "@traceforge/worker", "start"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://traceforge:traceforge@postgres:5432/traceforge?schema=public
+      REDIS_URL: redis://redis:6379
+      TRACEFORGE_API_KEY: ${TRACEFORGE_API_KEY:?Set TRACEFORGE_API_KEY in .env}
+    entrypoint:
+      - sh
+      - -c
+      - test "$${TRACEFORGE_API_KEY}" && exec pnpm --filter @traceforge/worker start
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  caddy:
+    image: caddy:2-alpine
+    profiles: [tls]
+    restart: unless-stopped
+    environment:
+      PUBLIC_IP: ${PUBLIC_IP:?Set PUBLIC_IP in .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
 volumes:
   postgres_data:
   redis_data:
+  caddy_data:
+  caddy_config:

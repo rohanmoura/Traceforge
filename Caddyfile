@@ -1,0 +1,8 @@
+http://{$PUBLIC_IP} {
+	redir https://{$PUBLIC_IP}{uri} permanent
+}
+
+https://{$PUBLIC_IP} {
+	tls /etc/letsencrypt/live/traceforge/fullchain.pem /etc/letsencrypt/live/traceforge/privkey.pem
+	reverse_proxy web:3000
+}
