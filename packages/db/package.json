@@ -8,11 +8,11 @@
     "./client": "./src/client.ts"
   },
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio",
-    "build": "prisma generate",
+    "db:generate": "dotenv -e ../../.env -- prisma generate",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "build": "dotenv -e ../../.env -- prisma generate",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
@@ -24,8 +24,8 @@
     "@traceforge/typescript-config": "workspace:*",
     "@types/node": "22.14.0",
     "eslint": "9.24.0",
+    "dotenv-cli": "8.0.0",
     "prisma": "6.5.0",
-    "typescript": "5.8.3",
-    "@prisma/client": "6.5.0"
+    "typescript": "5.8.3"
   }
 }

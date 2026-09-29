@@ -39,6 +39,7 @@ model Delivery {
   nextAttemptAt  DateTime?
   lastStatusCode Int?
   lastError      String?
+  responseBody   String?
   endpointId     String
   endpoint       Endpoint  @relation(fields: [endpointId], references: [id], onDelete: Cascade)
   createdAt      DateTime  @default(now())

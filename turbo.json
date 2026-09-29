@@ -20,5 +20,6 @@
     "clean": {
       "cache": false
     }
-  }
+  },
+  "globalPassThroughEnv": ["DATABASE_URL", "REDIS_URL", "TRACEFORGE_API_KEY"]
 }
