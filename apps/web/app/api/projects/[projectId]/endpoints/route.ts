@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { prisma } from "@traceforge/db";
+import { prisma, type Prisma } from "@traceforge/db";
 import { validateEndpointUrl } from "@traceforge/env";
 import {
   isAuthorizedApiRequest,
@@ -31,9 +31,19 @@ export async function GET(
     },
     orderBy: { createdAt: "desc" },
   });
+  type EndpointWithDeliveryCount = Prisma.EndpointGetPayload<{
+    select: {
+      id: true;
+      name: true;
+      url: true;
+      enabled: true;
+      createdAt: true;
+      _count: { select: { deliveries: true } };
+    };
+  }>;
   return Response.json({
     endpoints: isPublicReadOnlyGuestRequest(request)
-      ? endpoints.map((endpoint) => ({
+      ? endpoints.map((endpoint: EndpointWithDeliveryCount) => ({
           ...endpoint,
           url: new URL(endpoint.url).origin,
         }))
