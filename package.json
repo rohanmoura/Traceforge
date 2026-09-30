@@ -2,7 +2,7 @@
   "name": "traceforge",
   "private": true,
   "scripts": {
-    "dev": "dotenv -e .env -- turbo run dev --filter=@traceforge/web --filter=@traceforge/worker",
+    "dev": "dotenv -e .env -- pnpm --filter @traceforge/db build && dotenv -e .env -- turbo run dev --filter=@traceforge/web --filter=@traceforge/worker",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
