@@ -55,7 +55,11 @@ Or explicitly select region/type/ref:
 .\scripts\aws\deploy.ps1 -Region ap-south-1 -InstanceType t3.small -GitRef main
 ```
 
-The script waits for the app health check and prints the EC2 instance ID and public URL, for example `https://3.110.20.30`. Initial startup takes a few minutes while the OS installs Docker, requests the certificate, and pulls the services. Ports 80 (HTTPS redirect/certificate renewal) and 443 (HTTPS) are open publicly; SSH, the database, and Redis are not. The EC2 instance profile allows you to connect through AWS Systems Manager Session Manager instead of opening SSH. For owner access, use SSM to read `TRACEFORGE_API_KEY` from `/opt/traceforge/.env.production`, then enter it in TraceForge before showing your screen. Do not share that key.
+The script waits for the app health check and prints the EC2 instance ID and public URL, for example `https://3.110.20.30`. Initial startup takes a few minutes while the OS installs Docker, requests the certificate, and pulls the services. Ports 80 (HTTPS redirect/certificate renewal) and 443 (HTTPS) are open publicly; SSH, the database, and Redis are not. The EC2 instance profile allows you to connect through AWS Systems Manager Session Manager instead of opening SSH. For owner access, use SSM to read `TRACEFORGE_API_KEY` from `/opt/traceforge/.env.production`,
+```powershell
+sudo grep '^TRACEFORGE_API_KEY=' /opt/traceforge/.env.production
+```
+then enter it in TraceForge before showing your screen. Do not share that key.
 
 ### Remove after the interview
 
