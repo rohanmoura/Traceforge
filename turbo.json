@@ -19,6 +19,12 @@
     },
     "clean": {
       "cache": false
+    },
+    "@traceforge/db#build": {
+      "cache": false
+    },
+    "@traceforge/db#typecheck": {
+      "dependsOn": ["build"]
     }
   },
   "globalPassThroughEnv": [
